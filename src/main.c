@@ -19,7 +19,7 @@ char *TAUNTS[] = {"Get yo hands off mah files!",
                   "Now you're really getting to annoy me...",
                   "I *will* reboot your computer!"};
 
-static void handle_event(int *count, char *name, char *cwd, char *tty) {
+static void handle_event(int *count, char *name, char *tty) {
   int local_count = *count;
   *count = local_count + 1;
 
