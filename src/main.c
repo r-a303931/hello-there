@@ -13,23 +13,27 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define FILE_DIR "/etc/SUPER_SECRET_STUFF"
-#define FILE_NAME "README"
+#define FILE_NAME "/etc/SUPER_SECRET_STUFF/README"
 
 char *TAUNTS[] = {"Get yo hands off mah files!",
                   "Now you're really getting to annoy me...",
                   "I *will* reboot your computer!"};
 
 static void handle_event(int *count, char *name, char *cwd, char *tty) {
-  int pid = fork();
-  int local_count = *count++;
+  int local_count = *count;
+  *count = local_count + 1;
 
-  if (local_count > 3) {
-    char *reboot[] = {"REBOOT", NULL};
-    execvp("reboot", reboot);
-    exit(0);
+  if (local_count > 2) {
+    char *reboot[] = {"sudo", "reboot", NULL};
+    execvp("sudo", reboot);
   }
 
+  FILE *fcount;
+  fcount = fopen("/count", "w");
+  fprintf(fcount, "%d\n", local_count);
+  fclose(fcount);
+
+  int pid = fork();
   if (pid == 0) {
     if (!strncmp(tty, "tty", 3)) {
       char figletcmd[128];
@@ -70,7 +74,7 @@ static void find_event(auparse_state_t *au, auparse_cb_event_t cb_event_type,
 
   auparse_first_record(au);
 
-  char *name = NULL, *cwd = NULL, *tty = NULL;
+  char *name = NULL, *tty = NULL;
 
   do {
     int type = auparse_get_type(au);
@@ -79,41 +83,22 @@ static void find_event(auparse_state_t *au, auparse_cb_event_t cb_event_type,
     if (type == AUDIT_PATH) {
       if (auparse_find_field(au, "name")) {
         name = strdup(auparse_interpret_field(au));
-        printf("name: %s\n", name);
-      }
-    } else if (type == AUDIT_CWD) {
-      if (auparse_find_field(au, "cwd")) {
-        cwd = strdup(auparse_interpret_field(au));
-        printf("cwd: %s\n", cwd);
       }
     } else if (type == AUDIT_SYSCALL) {
       if (auparse_find_field(au, "tty")) {
         tty = strdup(auparse_get_field_str(au));
-        printf("tty: %s\n", tty);
       }
-    } /*else {
-      printf("clear\n");
-      if (name)
-        free(name);
-      if (cwd)
-        free(cwd);
-      if (tty)
-        free(tty);
+    } else if (type == AUDIT_CWD) {
+    } else if (type == AUDIT_PROCTITLE) {
+    }
 
-      name = NULL;
-      cwd = NULL;
-      tty = NULL;
-    }*/
-
-    if (name != NULL && cwd != NULL && tty != NULL) {
-      if (!strcmp(name, FILE_NAME) && !strcmp(cwd, FILE_DIR)) {
-        handle_event(count, name, cwd, tty);
+    if (name != NULL && tty != NULL) {
+      if (!strcmp(name, FILE_NAME)) {
+        handle_event(count, name, tty);
       }
       free(name);
-      free(cwd);
       free(tty);
       name = NULL;
-      cwd = NULL;
       tty = NULL;
     }
   } while (auparse_next_record(au) > 0);
@@ -126,8 +111,6 @@ int main(int argc, char **argv) {
 
   au = auparse_init(AUSOURCE_FEED, 0);
   auparse_add_callback(au, find_event, (void *)&check_count, NULL);
-
-  printf("main\n");
 
   do {
     int retval = -1;
